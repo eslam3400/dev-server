@@ -1,0 +1,19 @@
+name: big-bear-portainer
+services:
+  app:
+    container_name: big-bear-portainer
+    image: portainer/portainer-ce:2.41.1-alpine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - type: bind
+        source: /DATA/AppData/big-bear-portainer/data
+        target: /data
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/portainer.png

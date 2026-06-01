@@ -1,0 +1,29 @@
+name: big-bear-code-server
+services:
+  app:
+    container_name: code-server
+    image: linuxserver/code-server:4.118.0
+    restart: always
+    ports:
+      - "8080:8443"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: UTC
+      PASSWORD: "${CODE_SERVER_PASSWORD}"
+      SUDO_PASSWORD: "${CODE_SERVER_SUDO_PASSWORD}"
+      OPENAI_API_KEY: "${CODE_SERVER_OPENAI_API_KEY}"
+      DEFAULT_WORKSPACE: /config/workspace
+    volumes:
+      - type: bind
+        source: /DATA/AppData/big-bear-code-server/config
+        target: /config
+      # Adjust this path to the new user's home directory on the target machine
+      - type: bind
+        source: /home/eslam/.ssh
+        target: /config/.ssh
+      - type: bind
+        source: /home/eslam/work
+        target: /projects
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/coder.png
