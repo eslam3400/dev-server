@@ -31,7 +31,8 @@ The database/storage services and `dbgate` share a `dev` bridge network, so
 
 > **Note:** all data lives in bind mounts under `/docker-data` (no named
 > volumes). These host paths are **not** auto-created by Docker — run
-> `./setup-host.sh` once on a fresh host first (see below). RustFS and the
+> `./setup-host.sh` once on a fresh host first (run it with Bash, not `sh`;
+> see below). RustFS and the
 > tooling images are still unpinned (`:latest`).
 
 ---
@@ -44,6 +45,9 @@ All data lives in bind mounts under `/docker-data`. Docker won't create those
 source paths for you, so run the setup script once on the fresh host. It creates
 every bind-mount directory, the code-server home mounts, and the TUN device for
 Tailscale.
+
+Important: this script uses Bash syntax, so run it with Bash (`./setup-host.sh`
+or `bash setup-host.sh`) and do not use `sh setup-host.sh`.
 
 ```bash
 chmod +x setup-host.sh
