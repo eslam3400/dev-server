@@ -1,0 +1,158 @@
+name: server-config
+services:
+  tailscale:
+    container_name: tailscale
+    image: tailscale/tailscale
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    entrypoint:
+      - /bin/sh
+      - -c
+      - exec tailscaled --state=/var/lib/tailscale/tailscaled.state
+    environment:
+      TS_STATE_DIR: /var/lib/tailscale
+    volumes:
+      - /docker-data/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Tailscale/icon.png
+  portainer:
+    container_name: portainer
+    image: portainer/portainer-ce
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /docker-data/portainer/data:/data
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/portainer.png
+  code-server:
+    container_name: code-server
+    image: linuxserver/code-server
+    restart: unless-stopped
+    ports:
+      - "8080:8443"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: UTC
+      PASSWORD: "${CODE_SERVER_PASSWORD}"
+      SUDO_PASSWORD: "${CODE_SERVER_SUDO_PASSWORD}"
+      DEFAULT_WORKSPACE: /projects
+    volumes:
+      - /docker-data/code-server/config:/config
+      - /home/${LINUX_USER}/.ssh:/config/.ssh
+      - /home/${LINUX_USER}/work:/projects
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/coder.png
+  dbgate:
+    container_name: dbgate
+    image: dbgate/dbgate
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - /docker-data/dbgate/config:/root/.dbgate
+    networks:
+      - dev
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/bigbeartechworld/big-bear-universal-apps/apps/dbgate/logo.png
+  postgres:
+    image: postgres:18.4
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - /docker-data/postgresql/data:/var/lib/postgresql/data
+    networks:
+      - dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  mongodb:
+    image: mongo:8.3
+    container_name: mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB}
+    ports:
+      - "27017:27017"
+    volumes:
+      - /docker-data/mongodb/data/db:/data/db
+    networks:
+      - dev
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  redis:
+    image: redis:8.6.4
+    container_name: redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --save 60 1
+      --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - /docker-data/redis/data:/data
+    networks:
+      - dev
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    restart: unless-stopped
+    user: "0:0"
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - /docker-data/rustfs/data:/data
+    networks:
+      - dev
+    healthcheck:
+      test:
+        [
+          "CMD", "sh", "-c",
+          "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health"
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  dev:
+    name: dev
+    driver: bridge
