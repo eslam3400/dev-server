@@ -1,4 +1,4 @@
-name: server-config
+name: dev-server
 services:
   tailscale:
     container_name: tailscale
@@ -74,7 +74,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - /docker-data/postgresql/data:/var/lib/postgresql/data
+      - /docker-data/postgresql/data:/var/lib/postgresql
     networks:
       - dev
     healthcheck:
