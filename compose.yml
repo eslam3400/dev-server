@@ -48,7 +48,7 @@ services:
     volumes:
       - /docker-data/code-server/config:/config
       - /home/${LINUX_USER}/.ssh:/config/.ssh
-      - /home/${LINUX_USER}/work:/projects
+      - ${PROJECTS_DIR}:/projects
     labels:
       icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/coder.png
   dbgate:
@@ -78,7 +78,7 @@ services:
     networks:
       - dev
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -98,7 +98,7 @@ services:
     networks:
       - dev
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -108,11 +108,7 @@ services:
     container_name: redis
     restart: unless-stopped
     command: >
-      redis-server
-      --requirepass ${REDIS_PASSWORD}
-      --appendonly yes
-      --save 60 1
-      --loglevel warning
+      redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --save 60 1 --loglevel warning
     ports:
       - "6379:6379"
     volumes:
@@ -120,7 +116,7 @@ services:
     networks:
       - dev
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      test: [ "CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -142,11 +138,7 @@ services:
     networks:
       - dev
     healthcheck:
-      test:
-        [
-          "CMD", "sh", "-c",
-          "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health"
-        ]
+      test: [ "CMD", "sh", "-c", "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
