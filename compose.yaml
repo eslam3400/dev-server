@@ -1,0 +1,191 @@
+name: dev-stack
+services:
+  traefik:
+    container_name: traefik
+    image: traefik:v3
+    restart: unless-stopped
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=dev-stack
+      # HTTP/HTTPS entrypoints
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      # TCP entrypoints for data services
+      - --entrypoints.postgres.address=:5432
+      - --entrypoints.mongodb.address=:27017
+      - --entrypoints.redis.address=:6379
+      # Let's Encrypt
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/certs/acme.json
+      - --certificatesresolvers.le.acme.tlschallenge=true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "5432:5432"
+      - "27017:27017"
+      - "6379:6379"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /docker-data/traefik/certs:/certs
+    networks:
+      - dev-stack
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.dashboard.rule: "Host(`traefik.${DOMAIN}`)"
+      traefik.http.routers.dashboard.entrypoints: websecure
+      traefik.http.routers.dashboard.tls.certresolver: le
+      traefik.http.routers.dashboard.service: api@internal
+      traefik.http.routers.dashboard.middlewares: dashboard-auth
+      traefik.http.middlewares.dashboard-auth.basicauth.users: "${TRAEFIK_DASHBOARD_USERS}"
+
+  portainer:
+    container_name: portainer
+    image: portainer/portainer-ce
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /docker-data/portainer/data:/data
+    networks:
+      - dev-stack
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/selfhst/icons/png/portainer.png
+      traefik.enable: "true"
+      traefik.http.routers.portainer.rule: "Host(`portainer.${DOMAIN}`)"
+      traefik.http.routers.portainer.entrypoints: websecure
+      traefik.http.routers.portainer.tls.certresolver: le
+      traefik.http.services.portainer.loadbalancer.server.port: "9000"
+
+  dbgate:
+    container_name: dbgate
+    image: dbgate/dbgate
+    restart: unless-stopped
+    volumes:
+      - /docker-data/dbgate/config:/root/.dbgate
+    networks:
+      - dev-stack
+    labels:
+      icon: https://cdn.jsdelivr.net/gh/bigbeartechworld/big-bear-universal-apps/apps/dbgate/logo.png
+      traefik.enable: "true"
+      traefik.http.routers.dbgate.rule: "Host(`dbgate.${DOMAIN}`)"
+      traefik.http.routers.dbgate.entrypoints: websecure
+      traefik.http.routers.dbgate.tls.certresolver: le
+      traefik.http.services.dbgate.loadbalancer.server.port: "3000"
+
+  postgres:
+    image: postgres:18.4
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - /docker-data/postgresql/data:/var/lib/postgresql
+    networks:
+      - dev-stack
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    labels:
+      traefik.enable: "true"
+      traefik.tcp.routers.postgres.rule: "HostSNI(`postgres.${DOMAIN}`)"
+      traefik.tcp.routers.postgres.entrypoints: postgres
+      traefik.tcp.routers.postgres.tls: "true"
+      traefik.tcp.routers.postgres.tls.certresolver: le
+      traefik.tcp.services.postgres.loadbalancer.server.port: "5432"
+
+  mongodb:
+    image: mongo:8.3
+    container_name: mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DB}
+    volumes:
+      - /docker-data/mongodb/data/db:/data/db
+    networks:
+      - dev-stack
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    labels:
+      traefik.enable: "true"
+      traefik.tcp.routers.mongodb.rule: "HostSNI(`mongodb.${DOMAIN}`)"
+      traefik.tcp.routers.mongodb.entrypoints: mongodb
+      traefik.tcp.routers.mongodb.tls: "true"
+      traefik.tcp.routers.mongodb.tls.certresolver: le
+      traefik.tcp.services.mongodb.loadbalancer.server.port: "27017"
+
+  redis:
+    image: redis:8.6.4
+    container_name: redis
+    restart: unless-stopped
+    command: >
+      redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes --save 60 1 --loglevel warning
+    volumes:
+      - /docker-data/redis/data:/data
+    networks:
+      - dev-stack
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      traefik.enable: "true"
+      traefik.tcp.routers.redis.rule: "HostSNI(`redis.${DOMAIN}`)"
+      traefik.tcp.routers.redis.entrypoints: redis
+      traefik.tcp.routers.redis.tls: "true"
+      traefik.tcp.routers.redis.tls.certresolver: le
+      traefik.tcp.services.redis.loadbalancer.server.port: "6379"
+
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rustfs
+    restart: unless-stopped
+    user: "0:0"
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    volumes:
+      - /docker-data/rustfs/data:/data
+    networks:
+      - dev-stack
+    healthcheck:
+      test: [ "CMD", "sh", "-c", "curl -f http://127.0.0.1:9000/health && curl -f http://127.0.0.1:9001/rustfs/console/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      traefik.enable: "true"
+      # Console UI
+      traefik.http.routers.rustfs-console.rule: "Host(`storage.${DOMAIN}`)"
+      traefik.http.routers.rustfs-console.entrypoints: websecure
+      traefik.http.routers.rustfs-console.tls.certresolver: le
+      traefik.http.routers.rustfs-console.service: rustfs-console-svc
+      traefik.http.services.rustfs-console-svc.loadbalancer.server.port: "9001"
+      # S3 API
+      traefik.http.routers.rustfs-s3.rule: "Host(`s3.${DOMAIN}`)"
+      traefik.http.routers.rustfs-s3.entrypoints: websecure
+      traefik.http.routers.rustfs-s3.tls.certresolver: le
+      traefik.http.routers.rustfs-s3.service: rustfs-s3-svc
+      traefik.http.services.rustfs-s3-svc.loadbalancer.server.port: "9000"
+
+networks:
+  dev-stack:
+    name: dev-stack
+    driver: bridge
