@@ -95,7 +95,7 @@ services:
       start_period: 10s
     labels:
       traefik.enable: "true"
-      traefik.tcp.routers.postgres.rule: "HostSNI(`postgres.${DOMAIN}`)"
+      traefik.tcp.routers.postgres.rule: "HostSNI(`*`)"
       traefik.tcp.routers.postgres.entrypoints: postgres
       traefik.tcp.routers.postgres.tls: "true"
       traefik.tcp.routers.postgres.tls.certresolver: le
@@ -121,7 +121,7 @@ services:
       start_period: 20s
     labels:
       traefik.enable: "true"
-      traefik.tcp.routers.mongodb.rule: "HostSNI(`mongodb.${DOMAIN}`)"
+      traefik.tcp.routers.mongodb.rule: "HostSNI(`*`)"
       traefik.tcp.routers.mongodb.entrypoints: mongodb
       traefik.tcp.routers.mongodb.tls: "true"
       traefik.tcp.routers.mongodb.tls.certresolver: le
@@ -144,7 +144,7 @@ services:
       retries: 5
     labels:
       traefik.enable: "true"
-      traefik.tcp.routers.redis.rule: "HostSNI(`redis.${DOMAIN}`)"
+      traefik.tcp.routers.redis.rule: "HostSNI(`*`)"
       traefik.tcp.routers.redis.entrypoints: redis
       traefik.tcp.routers.redis.tls: "true"
       traefik.tcp.routers.redis.tls.certresolver: le

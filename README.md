@@ -116,17 +116,15 @@ contents of `compose.yaml`, and **Deploy the stack**.
 
 ### Connecting to the data services
 
-Traefik terminates TLS in front of the databases, so clients connect with TLS:
+Traefik terminates TLS in front of the databases using `HostSNI(*)`, so it
+accepts any hostname (or none) — no SNI requirement on the client. Connect with
+TLS enabled and use the server's IP or any hostname pointing at it:
 
 ```bash
-psql 'host=postgres.${DOMAIN} port=5432 sslmode=require sslnegotiation=direct user=USER dbname=DB'
+psql 'host=postgres.${DOMAIN} port=5432 sslmode=require user=USER dbname=DB'
 mongosh 'mongodb://USER:PASS@mongodb.${DOMAIN}:27017/DB?tls=true'
 redis-cli -h redis.${DOMAIN} -p 6379 -a PASS --tls
 ```
-
-> **Postgres note:** Traefik routes by SNI, but libpq's default negotiated TLS
-> sends no SNI. Use `sslnegotiation=direct` (PostgreSQL 17+ client) so the
-> handshake carries SNI and Traefik can route it.
 
 ---
 
