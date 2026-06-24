@@ -106,14 +106,14 @@ fi
 echo ">> Starting core services (traefik, portainer)..."
 # Use sudo docker because the docker group membership added above is not
 # active in this shell session until the user logs out and back in.
-set -a && source .env && set +a
+# Do NOT `source .env` — docker compose reads it automatically, and sourcing
+# would let bash expand any $ in the values (e.g. the bcrypt dashboard hash).
 sudo docker compose up -d traefik portainer
 
 echo ""
 echo ">> Done. Core services are up."
 echo ""
 echo "   To start the full stack:"
-echo "     set -a && source .env && set +a"
 echo "     docker compose up -d"
 echo ""
 echo "   DNS A records needed (all → this server's public IP):"
@@ -122,7 +122,7 @@ echo "     storage.<DOMAIN>   s3.<DOMAIN>"
 echo "     postgres.<DOMAIN>  mongodb.<DOMAIN>      redis.<DOMAIN>"
 echo ""
 echo "   Data service connection strings:"
-echo "     PostgreSQL : psql 'host=postgres.<DOMAIN> port=5432 sslmode=require user=USER dbname=DB'"
+echo "     PostgreSQL : psql 'host=postgres.<DOMAIN> port=5432 sslmode=require sslnegotiation=direct user=USER dbname=DB'"
 echo "     MongoDB    : mongosh 'mongodb://USER:PASS@mongodb.<DOMAIN>:27017/DB?tls=true'"
 echo "     Redis      : redis-cli -h redis.<DOMAIN> -p 6379 -a PASS --tls"
 echo "     RustFS S3  : endpoint https://s3.<DOMAIN>"

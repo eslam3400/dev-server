@@ -12,21 +12,22 @@ deploying containers. Everything lives in three files: `compose.yaml`,
 ## Common commands
 
 ```bash
-# One-time on a fresh host: create the /docker-data bind-mount dirs + TUN device
+# One-time on a fresh host: install Docker, create /docker-data bind mounts,
+# configure UFW, and start the core services (traefik + portainer).
+# Requires .env to exist first — it exits early otherwise.
+cp .env.example .env && nano .env        # fill in real values
 chmod +x setup-host.sh && ./setup-host.sh
 
 # Validate the compose file
 docker compose config -q
 
-# Deploy / update the whole stack (load .env into the shell first)
-set -a && source .env && set +a
+# Deploy / update the whole stack
+# Do NOT `source .env` — docker compose reads it automatically. Sourcing it
+# would let bash expand any $ in the values (e.g. the bcrypt dashboard hash).
 docker compose up -d
 
 # Tear down
 docker compose down
-
-# Connect Tailscale after first boot
-docker exec tailscale tailscale up --authkey=<your-auth-key>
 ```
 
 `compose.yaml` uses the default filename, so `docker compose` finds it with no
@@ -35,17 +36,31 @@ docker exec tailscale tailscale up --authkey=<your-auth-key>
 
 ## Architecture & invariants
 
-The stack has two logical groups of services on one `dev` bridge network:
+All services sit on one `dev-stack` bridge network and are **fronted by
+Traefik** — nothing is published on its own host port anymore. Traefik is the
+only container that binds host ports (80, 443, and the TCP entrypoints 5432 /
+27017 / 6379) and routes to everything else by Docker labels.
 
-- **Tooling:** `portainer`, `dbgate`.
+Three logical groups:
+
+- **Reverse proxy:** `traefik` (v3) — terminates TLS, gets certs from Let's
+  Encrypt via the ACME **TLS-ALPN-01** challenge (`certresolver: le`), and
+  routes by hostname. The dashboard is at `traefik.${DOMAIN}` behind basic auth.
+- **Tooling:** `portainer`, `dbgate` — HTTP routers on `portainer.${DOMAIN}` /
+  `dbgate.${DOMAIN}` (443).
 - **Data:** `postgres`, `mongodb`, `redis`, `rustfs` — each with a healthcheck.
+  The databases use **TCP routers with `HostSNI` + TLS termination** on their
+  own entrypoints; `rustfs` uses HTTP routers (`s3.${DOMAIN}`, `storage.${DOMAIN}`).
 
-`dbgate` connects to the data services **by container name** (`postgres`,
-`mongodb`, `redis`) over the shared `dev` network. The history matters here: this
-was previously two separate compose files (`server-apps.yml` + `dev-stack.yml`)
-where `dev` was an external network shared between them. They were merged into
-`compose.yaml`, so `dev` is now defined once as a regular bridge and the
-external-network / stack-ordering dependency is gone.
+Routing is hostname-based, so **every service needs a DNS A record**
+(`traefik`, `portainer`, `dbgate`, `storage`, `s3`, `postgres`, `mongodb`,
+`redis` — all under `${DOMAIN}`, all pointing at the host's public IP).
+
+`dbgate` still connects to the data services **by container name** (`postgres`,
+`mongodb`, `redis`) over the `dev-stack` network — internal traffic does not go
+through Traefik. (History: this was once two compose files sharing an external
+`dev` network; they were merged into `compose.yaml` and the network is now a
+single regular bridge named `dev-stack`.)
 
 Key invariants to preserve when editing:
 
@@ -55,13 +70,23 @@ Key invariants to preserve when editing:
   `setup-host.sh`, or the daemon creates it root-owned / fails.
 - **Secrets come from `.env`** via `${VAR}` interpolation. Adding a credentialed
   service means adding the var to both `compose.yaml` and `.env.example`.
+- **Never `source .env`.** compose reads it directly; sourcing it into the shell
+  lets bash expand `$` in values. A literal `$` in a value (notably the bcrypt
+  `TRAEFIK_DASHBOARD_USERS` hash) must be written as `$$` in `.env` so compose
+  emits a single `$`.
+- **Exposing a new service publicly** means adding Traefik labels (router rule +
+  entrypoint + `tls.certresolver: le` + a `loadbalancer.server.port`), a DNS
+  record, and — for a new TCP entrypoint — a `ports:` line on traefik plus a UFW
+  rule in `setup-host.sh`.
 
-Three files must stay in sync when services change: `compose.yaml` (the service),
-`setup-host.sh` (its bind-mount dir), and `.env.example` (its secrets). The
-README's service tables document the current port/data layout.
+Files that must stay in sync when services change: `compose.yaml` (the service +
+its Traefik labels), `setup-host.sh` (its bind-mount dir and any new UFW port),
+and `.env.example` (its secrets). The README's service tables document the
+current hostname/port/data layout.
 
 ## Notes
 
-- `rustfs`, `portainer`, and `dbgate` are unpinned (`:latest`); the data images are version-pinned.
-- The cSpell diagnostics flagging `dbgate`, `rustfs`, `healthcheck`, etc. are
-  spell-check noise, not errors.
+- `rustfs`, `portainer`, and `dbgate` are unpinned (`:latest`); `traefik` is
+  pinned to `:v3` and the data images are version-pinned.
+- The cSpell diagnostics flagging `dbgate`, `rustfs`, `healthcheck`, `traefik`,
+  `certresolver`, etc. are spell-check noise, not errors.
