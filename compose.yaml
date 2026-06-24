@@ -102,7 +102,7 @@ services:
       traefik.tcp.services.postgres.loadbalancer.server.port: "5432"
 
   mongodb:
-    image: mongo:8.3
+    image: mongo:7.0
     container_name: mongodb
     restart: unless-stopped
     environment:

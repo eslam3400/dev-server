@@ -30,7 +30,7 @@ Set `DOMAIN` in `.env`; the hostnames below are all `<name>.${DOMAIN}`.
 | App | Image | Endpoint | Data |
 |-----|-------|----------|------|
 | PostgreSQL | postgres:18.4 | `postgres.${DOMAIN}:5432` (TCP+TLS) | `/docker-data/postgresql/data` |
-| MongoDB | mongo:8.3 | `mongodb.${DOMAIN}:27017` (TCP+TLS) | `/docker-data/mongodb/data/db` |
+| MongoDB | mongo:7.0 | `mongodb.${DOMAIN}:27017` (TCP+TLS) | `/docker-data/mongodb/data/db` |
 | Redis | redis:8.6.4 | `redis.${DOMAIN}:6379` (TCP+TLS) | `/docker-data/redis/data` |
 | RustFS (S3 API) | rustfs/rustfs:latest | `https://s3.${DOMAIN}` | `/docker-data/rustfs/data` |
 | RustFS (console) | rustfs/rustfs:latest | `https://storage.${DOMAIN}` | `/docker-data/rustfs/data` |
@@ -116,15 +116,52 @@ contents of `compose.yaml`, and **Deploy the stack**.
 
 ### Connecting to the data services
 
-Traefik terminates TLS in front of the databases using `HostSNI(*)`, so it
-accepts any hostname (or none) — no SNI requirement on the client. Connect with
-TLS enabled and use the server's IP or any hostname pointing at it:
+> **TLS is required.** Traefik terminates TLS in front of every database TCP
+> entrypoint. A client that opens the socket without speaking TLS will hang
+> until it times out — this looks like a network problem but is a missing SSL
+> flag. Always enable TLS on the client side when connecting remotely.
+
+The certs are Let's Encrypt-issued but Traefik presents them as a passthrough,
+so most clients need `rejectUnauthorized: false` / `tlsAllowInvalidCertificates`
+unless you explicitly supply the CA. This is fine for self-hosted dev databases.
+
+**CLI**
 
 ```bash
 psql 'host=postgres.${DOMAIN} port=5432 sslmode=require user=USER dbname=DB'
-mongosh 'mongodb://USER:PASS@mongodb.${DOMAIN}:27017/DB?tls=true'
-redis-cli -h redis.${DOMAIN} -p 6379 -a PASS --tls
+mongosh 'mongodb://USER:PASS@mongodb.${DOMAIN}:27017/DB?tls=true&tlsAllowInvalidCertificates=true'
+redis-cli -h redis.${DOMAIN} -p 6379 -a PASS --tls --insecure
 ```
+
+**NestJS / Node.js env vars** (set these when the API targets the remote host)
+
+```bash
+# .env  — remote dev server
+POSTGRES_HOST=postgres.${DOMAIN}
+POSTGRES_PORT=5432
+DB_SSL=true          # enables ssl: { rejectUnauthorized: false } in db.config.ts
+
+MONGO_URI=mongodb://USER:PASS@mongodb.${DOMAIN}:27017/DB?tls=true&tlsAllowInvalidCertificates=true
+MONGO_SSL=true       # appends tls params to the URI in app-config.service.ts
+
+REDIS_HOST=redis.${DOMAIN}
+REDIS_PORT=6379
+REDIS_TLS=true
+```
+
+```bash
+# .env.prod  — containers on the same dev-stack network (no Traefik in the path)
+DB_SSL=false
+MONGO_SSL=false
+REDIS_TLS=false
+```
+
+**Verification matrix**
+
+| Connection | No TLS     | With TLS |
+|------------|------------|----------|
+| Postgres   | ❌ timeout | ✅ OK    |
+| MongoDB    | ❌ timeout | ✅ OK    |
 
 ---
 
