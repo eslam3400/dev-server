@@ -23,6 +23,8 @@ Set `DOMAIN` in `.env`; the hostnames below are all `<name>.${DOMAIN}`.
 |-----|-------|-----|------|
 | Portainer | portainer/portainer-ce | `https://portainer.${DOMAIN}` | `/docker-data/portainer/data` |
 | DBgate | dbgate/dbgate | `https://dbgate.${DOMAIN}` | `/docker-data/dbgate/config` |
+| Hermes Agent (dashboard) | nousresearch/hermes-agent:latest | `https://hermes.${DOMAIN}` (Hermes basic auth, set in config.yaml) | `/docker-data/hermes` |
+| Hermes Agent (API) | nousresearch/hermes-agent:latest | `https://hermes-api.${DOMAIN}` (API key) | `/docker-data/hermes` |
 | Traefik dashboard | (built-in) | `https://traefik.${DOMAIN}` (basic auth) | — |
 
 ### Databases & storage
@@ -53,6 +55,7 @@ pointing at the server's public IP:
 
 ```
 traefik.${DOMAIN}    portainer.${DOMAIN}   dbgate.${DOMAIN}
+hermes.${DOMAIN}     hermes-api.${DOMAIN}
 storage.${DOMAIN}    s3.${DOMAIN}
 postgres.${DOMAIN}   mongodb.${DOMAIN}     redis.${DOMAIN}
 ```
@@ -113,6 +116,54 @@ docker compose up -d
 
 Or via Portainer: **Stacks → Add stack**, name it `dev-stack`, paste the
 contents of `compose.yaml`, and **Deploy the stack**.
+
+### 5. Link Hermes Agent to Ollama Cloud (one-time)
+
+`OLLAMA_API_KEY` in `.env` authenticates Hermes to ollama.com, but the provider
+and default model are chosen once and written into the `/docker-data/hermes`
+bind mount. After the stack is up, run the interactive picker against the
+running container:
+
+```bash
+docker exec -it hermes hermes model
+#  → choose "Ollama Cloud"
+#  → the key from OLLAMA_API_KEY is already present
+#  → pick a model, e.g. gpt-oss:120b, qwen3-coder:480b-cloud, glm-4.6:cloud
+```
+
+This writes `/docker-data/hermes/config.yaml`:
+
+```yaml
+model:
+  provider: "ollama-cloud"     # endpoint: https://api.ollama.com/v1
+  default: "gpt-oss:120b"
+```
+
+**Dashboard auth (required).** Hermes refuses to bind its dashboard to a
+non-loopback address (needed so Traefik can reach it) unless an auth provider is
+registered in its own `config.yaml` — Traefik's basic-auth middleware does not
+count, because Hermes can't see it. Add a `dashboard.basic_auth` block to the
+same `/docker-data/hermes/config.yaml`:
+
+```bash
+# generate a password hash inside the container
+docker compose exec hermes python -c \
+  "from plugins.dashboard_auth.basic import hash_password; print(hash_password('your-password'))"
+```
+
+```yaml
+dashboard:
+  basic_auth:
+    username: admin
+    password_hash: "<paste the hash>"
+```
+
+Then `docker compose restart hermes`.
+
+Then use it via the dashboard at `https://hermes.${DOMAIN}` (Hermes basic
+auth), or call the OpenAI-compatible API at `https://hermes-api.${DOMAIN}`
+sending `Authorization: Bearer ${HERMES_API_SERVER_KEY}`. Other containers on
+the `dev-stack` network can reach it directly at `http://hermes:8642`.
 
 ### Connecting to the data services
 
@@ -202,5 +253,5 @@ dev-server/
 ├── INTEGRATION.md    # How a separate app repo connects to the DBs + Traefik
 ├── README.md         # This file
 ├── setup-host.sh     # Creates /docker-data bind-mount dirs, installs Docker
-└── compose.yaml      # portainer + dbgate + postgres + mongodb + redis + rustfs
+└── compose.yaml      # portainer + dbgate + hermes + postgres + mongodb + redis + rustfs
 ```

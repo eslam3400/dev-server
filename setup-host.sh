@@ -75,6 +75,7 @@ sudo mkdir -p /docker-data/postgresql/data
 sudo mkdir -p /docker-data/mongodb/data/db
 sudo mkdir -p /docker-data/redis/data
 sudo mkdir -p /docker-data/rustfs/data
+sudo mkdir -p /docker-data/hermes
 
 # ---------------------------------------------------------------------------
 # 4. Firewall (UFW)
@@ -118,6 +119,7 @@ echo "     docker compose up -d"
 echo ""
 echo "   DNS A records needed (all → this server's public IP):"
 echo "     traefik.<DOMAIN>   portainer.<DOMAIN>   dbgate.<DOMAIN>"
+echo "     hermes.<DOMAIN>    hermes-api.<DOMAIN>"
 echo "     storage.<DOMAIN>   s3.<DOMAIN>"
 echo "     postgres.<DOMAIN>  mongodb.<DOMAIN>      redis.<DOMAIN>"
 echo ""

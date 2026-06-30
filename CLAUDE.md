@@ -46,15 +46,25 @@ Three logical groups:
 - **Reverse proxy:** `traefik` (v3) — terminates TLS, gets certs from Let's
   Encrypt via the ACME **TLS-ALPN-01** challenge (`certresolver: le`), and
   routes by hostname. The dashboard is at `traefik.${DOMAIN}` behind basic auth.
-- **Tooling:** `portainer`, `dbgate` — HTTP routers on `portainer.${DOMAIN}` /
-  `dbgate.${DOMAIN}` (443).
+- **Tooling:** `portainer`, `dbgate`, `hermes` — HTTP routers on
+  `portainer.${DOMAIN}` / `dbgate.${DOMAIN}` (443). `hermes` (Hermes Agent,
+  Nous Research) exposes two routers: the dashboard on `hermes.${DOMAIN}`
+  (behind the shared `dashboard-auth` basic-auth middleware) and an
+  OpenAI-compatible API on `hermes-api.${DOMAIN}` (auth via `API_SERVER_KEY`).
+  The dashboard is **self-authenticated**: Hermes refuses a non-loopback bind
+  unless an auth provider is registered, so `dashboard.basic_auth`
+  (`username` + `password_hash`) must be set in `/docker-data/hermes/config.yaml`
+  — Traefik does *not* add a middleware on this router (that would double-prompt).
+  It is linked to **Ollama Cloud** (`https://api.ollama.com/v1`) via
+  `OLLAMA_API_KEY`; provider/model selection lives in `/docker-data/hermes/config.yaml`.
 - **Data:** `postgres`, `mongodb`, `redis`, `rustfs` — each with a healthcheck.
   The databases use **TCP routers with `HostSNI` + TLS termination** on their
   own entrypoints; `rustfs` uses HTTP routers (`s3.${DOMAIN}`, `storage.${DOMAIN}`).
 
 Routing is hostname-based, so **every service needs a DNS A record**
-(`traefik`, `portainer`, `dbgate`, `storage`, `s3`, `postgres`, `mongodb`,
-`redis` — all under `${DOMAIN}`, all pointing at the host's public IP).
+(`traefik`, `portainer`, `dbgate`, `hermes`, `hermes-api`, `storage`, `s3`,
+`postgres`, `mongodb`, `redis` — all under `${DOMAIN}`, all pointing at the
+host's public IP).
 
 `dbgate` still connects to the data services **by container name** (`postgres`,
 `mongodb`, `redis`) over the `dev-stack` network — internal traffic does not go

@@ -75,6 +75,34 @@ services:
       traefik.http.routers.dbgate.tls.certresolver: le
       traefik.http.services.dbgate.loadbalancer.server.port: "3000"
 
+  hermes:
+    container_name: hermes
+    image: nousresearch/hermes-agent:latest
+    restart: unless-stopped
+    command: gateway run
+    environment:
+      HERMES_DASHBOARD: "1"
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_KEY: ${HERMES_API_SERVER_KEY}
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY}
+    volumes:
+      - /docker-data/hermes:/opt/data
+    networks:
+      - dev-stack
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.hermes-dashboard.rule: "Host(`hermes.${DOMAIN}`)"
+      traefik.http.routers.hermes-dashboard.entrypoints: websecure
+      traefik.http.routers.hermes-dashboard.tls.certresolver: le
+      traefik.http.routers.hermes-dashboard.service: hermes-dashboard-svc
+      traefik.http.services.hermes-dashboard-svc.loadbalancer.server.port: "9119"
+      traefik.http.routers.hermes-api.rule: "Host(`hermes-api.${DOMAIN}`)"
+      traefik.http.routers.hermes-api.entrypoints: websecure
+      traefik.http.routers.hermes-api.tls.certresolver: le
+      traefik.http.routers.hermes-api.service: hermes-api-svc
+      traefik.http.services.hermes-api-svc.loadbalancer.server.port: "8642"
+
   postgres:
     image: postgres:18.4
     container_name: postgres
